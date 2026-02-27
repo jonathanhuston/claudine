@@ -1,0 +1,36 @@
+# fizzbuzz.cln — Classic FizzBuzz in Claudine
+
+fn fizzbuzz(n) do
+  for i in range(1, n + 1) do
+    match i % 15
+      case 0 => println("FizzBuzz")
+      case x =>
+        match i % 3
+          case 0 => println("Fizz")
+          case y =>
+            match i % 5
+              case 0 => println("Buzz")
+              case z => println(i)
+            end
+        end
+    end
+  end
+end
+
+# A more elegant version using if/elif
+fn fizzbuzz_v2(n) do
+  for i in range(1, n + 1) do
+    if i % 15 == 0 do
+      println("FizzBuzz")
+    elif i % 3 == 0 do
+      println("Fizz")
+    elif i % 5 == 0 do
+      println("Buzz")
+    else
+      println(i)
+    end
+  end
+end
+
+println("── FizzBuzz (1-20) ──")
+fizzbuzz_v2(20)

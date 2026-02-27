@@ -1,0 +1,30 @@
+# summarizer.cln — AI-powered text summarizer
+# Requires ANTHROPIC_API_KEY environment variable
+
+args do
+  arg file: string, "Text file to summarize"
+  option style: string, "Summary style (brief, detailed, bullets)", default: "brief"
+  flag verbose: bool, "Show extra information", short: "v"
+end
+
+let content = read_file(file)
+
+if verbose do
+  println("File: {file}")
+  println("Length: {length(content)} characters")
+  println("Style: {style}")
+  println()
+end
+
+let prompt = "Summarize the following text in a {style} style:\n\n{content}"
+
+let summary = ask(
+  prompt,
+  model: "sonnet",
+  temperature: 0.3,
+  system: "You are a helpful assistant that summarizes text clearly and concisely."
+)
+
+println("── Summary ──")
+println()
+println(summary)

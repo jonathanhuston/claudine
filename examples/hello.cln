@@ -1,0 +1,26 @@
+# hello.cln — Hello World in Claudine
+
+let name = "World"
+println("Hello, {name}!")
+
+# Demonstrate basic features
+let numbers = [1, 2, 3, 4, 5]
+let doubled = map(numbers, fn(x) => x * 2)
+println("Original: {numbers}")
+println("Doubled:  {doubled}")
+
+# Function definition
+fn greet(name, greeting = "Hello") do
+  println("{greeting}, {name}!")
+end
+
+greet("Claudine")
+greet("Developer", "Welcome")
+
+# Pipeline
+let result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  |> filter(fn(x) => x % 2 == 0)
+  |> map(fn(x) => x * x)
+  |> sum()
+
+println("Sum of squares of evens (1-10): {result}")

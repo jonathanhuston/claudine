@@ -1,0 +1,34 @@
+{
+  "name": "claudine-lang",
+  "displayName": "Claudine Language",
+  "description": "Syntax highlighting and language support for the Claudine programming language (.cln files)",
+  "version": "0.1.0",
+  "publisher": "claudine",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "claudine",
+        "aliases": ["Claudine", "claudine"],
+        "extensions": [".cln"],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/claudine-icon.png",
+          "dark": "./icons/claudine-icon.png"
+        }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "claudine",
+        "scopeName": "source.claudine",
+        "path": "./syntaxes/claudine.tmLanguage.json"
+      }
+    ]
+  }
+}
