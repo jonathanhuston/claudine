@@ -1,48 +1,155 @@
 import Foundation
+import CommandLineKit
 
 /// Interactive Read-Eval-Print Loop for Claudine.
 public class REPL {
     private let interpreter: Interpreter
-    private var history: [String] = []
+    private let lineReader: LineReader?
+    private var historyItems: [String] = []
+    private let historyFile: String
+
+    /// All Claudine keywords and built-in function names for tab completion.
+    private static let completionWords: [String] = [
+        // Keywords
+        "let", "var", "fn", "do", "end", "if", "else", "elif",
+        "for", "in", "while", "match", "case", "return", "break", "continue",
+        "struct", "import", "as", "try", "catch", "args", "arg", "option", "flag",
+        "true", "false", "nil", "and", "or", "not", "self",
+        // Built-in functions
+        "print", "println", "input", "read_file", "write_file", "append_file", "file_exists",
+        "split", "join", "trim", "replace", "contains", "starts_with", "ends_with",
+        "length", "upper", "lower",
+        "push", "pop", "map", "filter", "reduce", "sort", "reverse", "flatten", "zip", "sum",
+        "keys", "values", "has_key", "merge",
+        "abs", "min", "max", "floor", "ceil", "round", "sqrt", "random",
+        "type_of", "to_string", "to_int", "to_float",
+        "exec", "env", "exit", "sleep", "throw", "range",
+        "ask",
+    ]
 
     public init() {
         self.interpreter = Interpreter()
+        self.lineReader = LineReader()
+        self.historyFile = NSHomeDirectory() + "/.claudine_history"
+
+        if let lr = lineReader {
+            lr.setHistoryMaxLength(500)
+            try? lr.loadHistory(fromFile: historyFile)
+
+            lr.setCompletionCallback { buffer in
+                let partial = buffer.split(separator: " ").last.map(String.init) ?? buffer
+                guard !partial.isEmpty else { return [] }
+                let matches = REPL.completionWords.filter { $0.hasPrefix(partial) }
+                let prefix = String(buffer.dropLast(partial.count))
+                return matches.map { prefix + $0 }
+            }
+        }
     }
 
     public func run() {
         printBanner()
 
+        guard let lr = lineReader else {
+            runBasic()
+            return
+        }
+
+        let promptProps = TextProperties(.green, nil, .bold)
+        let parenProps = TextProperties(.red, nil, .bold)
+
+        while true {
+            do {
+                let line = try lr.readLine(
+                    prompt: "claudine> ",
+                    maxCount: 4096,
+                    strippingNewline: true,
+                    promptProperties: promptProps,
+                    readProperties: TextProperties.none,
+                    parenProperties: parenProps
+                )
+
+                let trimmed = line.trimmingCharacters(in: CharacterSet.whitespaces)
+                if trimmed.isEmpty { continue }
+
+                // Exit commands (no dot prefix needed)
+                if trimmed == "exit" || trimmed == "quit" {
+                    saveHistory()
+                    Swift.print("Goodbye!")
+                    return
+                }
+
+                // REPL commands
+                if trimmed.hasPrefix(".") {
+                    addToHistory(lr, trimmed)
+                    if handleCommand(trimmed) { continue }
+                }
+
+                // Multi-line input
+                var source = line
+                if needsMoreInput(source) {
+                    while true {
+                        guard let nextLine = try? lr.readLine(
+                            prompt: "       .. ",
+                            maxCount: 4096,
+                            strippingNewline: true
+                        ) else { break }
+                        source += "\n" + nextLine
+                        if !needsMoreInput(source) { break }
+                    }
+                }
+
+                addToHistory(lr, source)
+                executeSource(source)
+
+            } catch let error as LineReaderError {
+                switch error {
+                case .CTRLC:
+                    Swift.print("^C")
+                    continue
+                case .EOF:
+                    Swift.print()
+                    saveHistory()
+                    return
+                case .generalError(let msg):
+                    Swift.print("Error: \(msg)")
+                }
+            } catch {
+                Swift.print("Error: \(error)")
+            }
+        }
+
+        saveHistory()
+    }
+
+    /// Fallback REPL for non-terminal environments.
+    private func runBasic() {
         while true {
             Swift.print("claudine> ", terminator: "")
             fflush(stdout)
 
-            guard var line = readLine() else {
+            guard var line = Swift.readLine() else {
                 Swift.print()
                 break
             }
 
-            line = line.trimmingCharacters(in: .whitespaces)
-
+            line = line.trimmingCharacters(in: CharacterSet.whitespaces)
             if line.isEmpty { continue }
 
-            // REPL commands
             if line.hasPrefix(".") {
                 if handleCommand(line) { continue }
             }
 
-            // Multi-line input: if line ends with "do", collect until "end"
             var source = line
             if needsMoreInput(source) {
                 while true {
                     Swift.print("       .. ", terminator: "")
                     fflush(stdout)
-                    guard let nextLine = readLine() else { break }
+                    guard let nextLine = Swift.readLine() else { break }
                     source += "\n" + nextLine
                     if !needsMoreInput(source) { break }
                 }
             }
 
-            history.append(source)
             executeSource(source)
         }
     }
@@ -53,9 +160,15 @@ public class REPL {
         Swift.print()
     }
 
+    private func addToHistory(_ lr: LineReader, _ item: String) {
+        lr.addHistory(item)
+        historyItems.append(item)
+    }
+
     private func handleCommand(_ command: String) -> Bool {
         switch command {
         case ".exit", ".quit", ".q":
+            saveHistory()
             Foundation.exit(0)
         case ".help":
             Swift.print("""
@@ -68,10 +181,10 @@ public class REPL {
             """)
             return true
         case ".clear":
-            Swift.print("\u{001B}[2J\u{001B}[H", terminator: "")
+            try? lineReader?.clearScreen()
             return true
         case ".history":
-            for (i, item) in history.enumerated() {
+            for (i, item) in historyItems.enumerated() {
                 Swift.print("  [\(i + 1)] \(item)")
             }
             return true
@@ -95,7 +208,6 @@ public class REPL {
             let parser = Parser(tokens: tokens, fileName: "<repl>")
             let stmts = try parser.parse()
 
-            // If it's a single expression statement, print the result
             if stmts.count == 1, case .expression(let expr) = stmts[0] {
                 let value = try interpreter.evaluate(expr, env: interpreter.globalEnv)
                 if case .nil = value {
@@ -123,15 +235,13 @@ public class REPL {
     }
 
     private func needsMoreInput(_ source: String) -> Bool {
-        // Count unmatched do/end, brackets, parens
         var doCount = 0
         var endCount = 0
         var parenDepth = 0
         var bracketDepth = 0
         var braceDepth = 0
 
-        // Simple token-level counting
-        let words = source.components(separatedBy: .whitespacesAndNewlines)
+        let words = source.components(separatedBy: CharacterSet.whitespacesAndNewlines)
         for word in words {
             switch word {
             case "do": doCount += 1
@@ -153,5 +263,9 @@ public class REPL {
         }
 
         return doCount > endCount || parenDepth > 0 || bracketDepth > 0 || braceDepth > 0
+    }
+
+    private func saveHistory() {
+        try? lineReader?.saveHistory(toFile: historyFile)
     }
 }
